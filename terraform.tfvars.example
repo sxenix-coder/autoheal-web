@@ -1,0 +1,26 @@
+# Copy to terraform.tfvars and adjust as needed.
+# All values below are the module defaults - override only what you need.
+
+aws_region  = "ap-southeast-2"
+environment = "dev"
+owner       = "platform-engineering"
+cost_centre = "engineering"
+
+# Instance sizing. t4g.nano (ARM/Graviton) is the cheapest option that
+# comfortably serves a static page.
+instance_type = "t4g.nano"
+
+# N+1: two instances across two AZs.
+asg_min_size         = 2
+asg_desired_capacity = 2
+asg_max_size         = 4
+
+# Restrict this to your own IP for a real deployment, e.g. "203.0.113.10/32".
+allowed_http_cidr = "0.0.0.0/0"
+
+# Optional bonus - containerised delivery.
+# enable_container_mode = true
+# container_image       = "ghcr.io/OWNER/autoheal-web:latest"
+
+# Pin the AMI for strict long-term idempotency (see README).
+# ami_id = "ami-0123456789abcdef0"
