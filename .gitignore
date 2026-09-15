@@ -19,3 +19,6 @@ tfplan
 .vscode/
 .idea/
 .DS_Store
+
+# Nested module lock files - providers are inherited from the root module
+modules/**/.terraform.lock.hcl
