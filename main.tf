@@ -77,3 +77,28 @@ module "security" {
   vpc_id            = module.networking.vpc_id
   allowed_http_cidr = var.allowed_http_cidr
 }
+
+module "web_tier" {
+  source = "./modules/web_tier"
+
+  name_prefix = local.name_prefix
+
+  vpc_id     = module.networking.vpc_id
+  subnet_ids = module.networking.public_subnet_ids
+
+  alb_security_group_id      = module.security.alb_security_group_id
+  instance_security_group_id = module.security.instance_security_group_id
+
+  ami_id        = local.resolved_ami_id
+  instance_type = var.instance_type
+
+  min_size                  = var.asg_min_size
+  max_size                  = var.asg_max_size
+  desired_capacity          = var.asg_desired_capacity
+  health_check_grace_period = var.health_check_grace_period
+
+  enable_container_mode = var.enable_container_mode
+  container_image       = var.container_image
+
+  environment = var.environment
+}

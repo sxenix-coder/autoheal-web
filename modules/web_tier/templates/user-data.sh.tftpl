@@ -1,0 +1,90 @@
+#!/bin/bash
+set -euo pipefail
+
+# Log everything to a predictable location for troubleshooting via SSM.
+exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+
+echo "[user-data] Starting bootstrap for ${project} (${environment})"
+
+dnf -y update
+
+%{ if enable_container_mode ~}
+###############################################################################
+# Container mode - pull and run the published image
+###############################################################################
+echo "[user-data] Container mode enabled"
+
+dnf -y install docker
+systemctl enable --now docker
+
+# Retry the pull: the registry or network path may not be ready immediately.
+for attempt in 1 2 3 4 5; do
+  if docker pull "${container_image}"; then
+    echo "[user-data] Image pulled on attempt $attempt"
+    break
+  fi
+  echo "[user-data] Pull attempt $attempt failed, retrying in 10s"
+  sleep 10
+done
+
+# --restart=always ensures the container comes back if it or Docker restarts,
+# which complements the ASG-level self-healing.
+docker run -d \
+  --name web \
+  --restart=always \
+  -p 80:80 \
+  "${container_image}"
+
+%{ else ~}
+###############################################################################
+# Native mode - install NGINX and serve a static page
+###############################################################################
+echo "[user-data] Native NGINX mode"
+
+dnf -y install nginx
+
+TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/instance-id)
+AZ=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/placement/availability-zone)
+
+cat > /usr/share/nginx/html/index.html <<HTML
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${project}</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0;
+           display: grid; place-items: center; min-height: 100vh;
+           background: #0f172a; color: #e2e8f0; }
+    .card { text-align: center; padding: 2rem 3rem; border: 1px solid #1e293b;
+            border-radius: 12px; background: #111c33; }
+    h1 { margin: 0 0 .5rem; font-size: 1.5rem; }
+    dl { display: grid; grid-template-columns: auto auto; gap: .35rem 1rem;
+         margin: 1.25rem 0 0; font-size: .9rem; text-align: left; }
+    dt { color: #94a3b8; }
+    dd { margin: 0; font-family: ui-monospace, monospace; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Auto-healing web tier</h1>
+    <p>Served by NGINX behind an Application Load Balancer.</p>
+    <dl>
+      <dt>Instance</dt><dd>$INSTANCE_ID</dd>
+      <dt>AZ</dt><dd>$AZ</dd>
+      <dt>Environment</dt><dd>${environment}</dd>
+    </dl>
+  </div>
+</body>
+</html>
+HTML
+
+systemctl enable --now nginx
+%{ endif ~}
+
+echo "[user-data] Bootstrap complete"
