@@ -69,3 +69,11 @@ module "networking" {
   vpc_cidr           = var.vpc_cidr
   availability_zones = local.azs
 }
+
+module "security" {
+  source = "./modules/security"
+
+  name_prefix       = local.name_prefix
+  vpc_id            = module.networking.vpc_id
+  allowed_http_cidr = var.allowed_http_cidr
+}
