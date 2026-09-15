@@ -57,3 +57,15 @@ locals {
   # Take only as many AZs as requested, in a deterministic order.
   azs = slice(data.aws_availability_zones.available.names, 0, var.availability_zone_count)
 }
+
+###############################################################################
+# Modules
+###############################################################################
+
+module "networking" {
+  source = "./modules/networking"
+
+  name_prefix        = local.name_prefix
+  vpc_cidr           = var.vpc_cidr
+  availability_zones = local.azs
+}
