@@ -1,0 +1,144 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  TF_VERSION: "1.9.8"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Terraform format, validate and lint.
+  #
+  # No AWS credentials are required: `terraform init -backend=false` skips
+  # backend configuration, and `validate` checks syntax and internal references
+  # without contacting AWS. A real `terraform plan` needs credentials and is
+  # therefore gated separately below.
+  # ---------------------------------------------------------------------------
+  terraform:
+    name: Terraform validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive -diff
+
+      - name: Initialise (no backend)
+        run: terraform init -backend=false
+
+      - name: Validate
+        run: terraform validate -no-color
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      # TFLint is advisory here rather than blocking. It surfaces style and
+      # provider-specific suggestions that are useful to see but should not
+      # fail a build on their own.
+      - name: TFLint
+        continue-on-error: true
+        run: |
+          tflint --init
+          tflint --recursive --format compact
+
+  # ---------------------------------------------------------------------------
+  # Real `terraform plan`.
+  #
+  # Disabled by default so the pipeline runs end to end without secrets. To
+  # enable: configure OIDC federation to AWS, add the role ARN as a repository
+  # secret, uncomment the credentials step, and change `if:` to true.
+  # ---------------------------------------------------------------------------
+  plan:
+    name: Terraform plan
+    runs-on: ubuntu-latest
+    needs: terraform
+    if: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      # - name: Configure AWS credentials via OIDC
+      #   uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     role-to-assume: ${{ secrets.AWS_PLAN_ROLE_ARN }}
+      #     aws-region: ap-southeast-2
+
+      - name: Initialise
+        run: terraform init
+
+      - name: Plan
+        run: terraform plan -no-color -input=false -out=tfplan
+
+  # ---------------------------------------------------------------------------
+  # Build the container image, verify it actually serves, and publish it to
+  # GitHub Container Registry on pushes to main.
+  # ---------------------------------------------------------------------------
+  container:
+    name: Container build and smoke test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t autoheal-web:ci ./docker
+
+      # A build that succeeds proves the Dockerfile is valid. This proves the
+      # image actually serves a page, which is the thing that matters.
+      - name: Smoke test
+        run: |
+          docker run -d --name web -p 8080:80 autoheal-web:ci
+          for attempt in $(seq 1 10); do
+            if curl -fsS http://localhost:8080/ > /dev/null; then
+              echo "Container is serving correctly"
+              docker rm -f web
+              exit 0
+            fi
+            echo "Attempt $attempt: not ready, retrying in 2s"
+            sleep 2
+          done
+          echo "Container failed to serve" >&2
+          docker logs web
+          exit 1
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          IMAGE=ghcr.io/${{ github.repository_owner }}/autoheal-web
+          docker tag autoheal-web:ci "$IMAGE:latest"
+          docker tag autoheal-web:ci "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+          docker push "$IMAGE:${{ github.sha }}"
