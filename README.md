@@ -230,11 +230,7 @@ continues to serve from the remaining instance in the other AZ.
 
 ![Page still serving from the surviving instance](docs/screenshots/4.jpg)
 
-### 4. Continuous availability check running
-
-![Curl loop polling the endpoint](docs/screenshots/5.jpg)
-
-### 5. Replacement launched automatically, mid-bootstrap
+### 4. Replacement launched automatically, mid-bootstrap
 
 The ASG has already launched a replacement with a new instance ID. It shows as
 `initial` while cloud-init installs NGINX. The surviving instance remains
@@ -242,7 +238,7 @@ The ASG has already launched a replacement with a new instance ID. It shows as
 
 ![Target health showing one healthy target and one initialising replacement](docs/screenshots/6.jpg)
 
-### 6. Measured availability during the failure
+### 5. Measured availability during the failure
 
 A continuous 2-second poll of the endpoint across the termination window:
 
@@ -278,7 +274,7 @@ before terminating them, so rolling changes cause no errors at all. The window
 above only applies to an unplanned, abrupt instance loss, which is precisely
 what was being tested.
 
-### 7. Full capacity restored
+### 6. Full capacity restored
 
 Both targets healthy again, with the replacement instance now serving.
 
