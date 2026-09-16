@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>autoheal-web</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+      background: #0f172a;
+      color: #e2e8f0;
+    }
+    .card {
+      text-align: center;
+      padding: 2rem 3rem;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      background: #111c33;
+    }
+    h1 {
+      margin: 0 0 .5rem;
+      font-size: 1.5rem;
+    }
+    p {
+      color: #94a3b8;
+      margin: .25rem 0 0;
+      font-size: .9rem;
+    }
+    .tag {
+      display: inline-block;
+      margin-top: 1.25rem;
+      padding: .25rem .6rem;
+      border-radius: 999px;
+      background: #1e293b;
+      color: #7dd3fc;
+      font-size: .75rem;
+      font-family: ui-monospace, monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Auto-healing web tier</h1>
+    <p>Containerised NGINX behind an Application Load Balancer.</p>
+    <span class="tag">container mode</span>
+  </div>
+</body>
+</html>
