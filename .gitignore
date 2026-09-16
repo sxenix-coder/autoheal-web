@@ -22,3 +22,7 @@ tfplan
 
 # Nested module lock files - providers are inherited from the root module
 modules/**/.terraform.lock.hcl
+plan-output.txt
+
+# Windows "downloaded from internet" metadata created via WSL
+*:Zone.Identifier
