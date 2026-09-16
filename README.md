@@ -107,8 +107,10 @@ Target Group                    GET / expects HTTP 200, every 15s
 5. The replacement boots, runs its cloud-init bootstrap, and installs NGINX.
 6. After the grace period it passes two consecutive health checks and rejoins.
 
-Measured in testing: **full capacity restored in under 4 minutes, with zero
-failed requests.**
+Measured in testing: **full capacity restored in under 4 minutes.** A brief
+window of failed requests occurs during detection - see
+[Demonstration](#demonstration) for the measured behaviour and the tuning
+options that reduce it.
 
 ---
 
@@ -240,11 +242,41 @@ The ASG has already launched a replacement with a new instance ID. It shows as
 
 ![Target health showing one healthy target and one initialising replacement](docs/screenshots/6.jpg)
 
-### 6. No downtime
+### 6. Measured availability during the failure
 
-Unbroken HTTP 200 responses spanning the termination and replacement window.
+A continuous 2-second poll of the endpoint across the termination window:
 
-![Curl loop showing continuous HTTP 200 responses](docs/screenshots/7.jpg)
+![Curl loop spanning the termination](docs/screenshots/5.jpg)
+
+The termination produced a **33-second window** in which some requests failed -
+one 502 and two 504 responses between 10:50:16 and 10:50:49 - after which the
+endpoint returned 200 continuously for the remainder of the test:
+
+![Curl loop showing sustained HTTP 200 responses](docs/screenshots/7.jpg)
+
+**Why the failures occur, and why they are intermittent rather than total:**
+the instance was terminated abruptly, but the ALB does not know that yet. With
+a 15-second health check interval and an unhealthy threshold of 2, detection
+takes up to 30 seconds. During that window the ALB continues round-robining
+across both targets, so roughly half the requests reach the dead instance and
+return 502 or 504 while the other half are served normally by the surviving
+instance. Once the health check deregisters the failed target, all traffic
+routes to the healthy instance and errors stop.
+
+This is the expected behaviour for an abrupt instance loss, and it is tunable:
+
+| Change | Effect |
+|---|---|
+| `interval` 15s to 10s | Detection window drops from ~30s to ~20s |
+| Graceful shutdown via ASG lifecycle hook | Target deregisters *before* the instance stops, eliminating in-flight errors for planned replacements |
+| Lower `deregistration_delay` | Already set to 30s rather than the 300s default |
+
+The trade-off with a shorter interval is more health check traffic and a higher
+risk of marking a briefly slow instance as unhealthy. For a planned deployment
+the `instance_refresh` block already handles this correctly - it drains targets
+before terminating them, so rolling changes cause no errors at all. The window
+above only applies to an unplanned, abrupt instance loss, which is precisely
+what was being tested.
 
 ### 7. Full capacity restored
 
@@ -252,8 +284,9 @@ Both targets healthy again, with the replacement instance now serving.
 
 ![Target health showing both targets healthy](docs/screenshots/8.jpg)
 
-**Measured recovery time: under 4 minutes from termination to full capacity,
-with zero failed requests.**
+**Measured recovery: replacement instance healthy and serving 3 minutes 28
+seconds after termination (10:50:16 to 10:53:44), with a 33-second window of
+partial errors during health check detection.**
 
 ---
 
